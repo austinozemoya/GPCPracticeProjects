@@ -1,0 +1,36 @@
+#Configuring an HTTP Load Balancer with Autoscaling
+
+
+###########################################################
+#Configure a health check firewall rule
+gcloud compute --project=qwiklabs-gcp-8ee414a241735cb8 firewall-rules create fw-allow-health-checks --direction=INGRESS --priority=1000 --network=default --action=ALLOW --rules=tcp:80 --source-ranges=130.211.0.0/22,35.191.0.0/16 --target-tags=allow-health-checks
+
+
+#Create a NAT configuration using Cloud Router
+
+#Create a custom image for a web server
+gcloud beta compute --project=qwiklabs-gcp-8ee414a241735cb8 instances create webserver --zone=us-central1-a --machine-type=f1-micro --subnet=default --no-address --maintenance-policy=MIGRATE --service-account=683878924486-compute@developer.gserviceaccount.com --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=allow-health-checks --image=debian-9-stretch-v20200902 --image-project=debian-cloud --boot-disk-size=10GB --no-boot-disk-auto-delete --boot-disk-type=pd-standard --boot-disk-device-name=webserver --reservation-affinity=any
+#custormize the VM
+sudo apt-get update
+sudo apt-get install -y apache2
+sudo service apache2 start
+
+#Configure an instance template and create instance groups
+gcloud beta compute --project=qwiklabs-gcp-8ee414a241735cb8 instance-templates create mywebserver-template --machine-type=f1-micro --network=projects/qwiklabs-gcp-8ee414a241735cb8/global/networks/default --no-address --maintenance-policy=MIGRATE --service-account=683878924486-compute@developer.gserviceaccount.com --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=allow-health-checks --image=mywebserver --image-project=qwiklabs-gcp-8ee414a241735cb8 --boot-disk-size=10GB --boot-disk-type=pd-standard --boot-disk-device-name=mywebserver-template --reservation-affinity=any
+
+gcloud compute --project "qwiklabs-gcp-8ee414a241735cb8" health-checks create tcp "http-health-check" --timeout "5" --check-interval "10" --unhealthy-threshold "3" --healthy-threshold "2" --port "80"
+
+gcloud beta compute --project=qwiklabs-gcp-8ee414a241735cb8 instance-groups managed create us-central1-mig --base-instance-name=us-central1-mig --template=mywebserver-template --size=1 --zones=us-central1-b,us-central1-c,us-central1-f --instance-redistribution-type=PROACTIVE --health-check=http-health-check --initial-delay=300
+
+gcloud beta compute --project "qwiklabs-gcp-8ee414a241735cb8" instance-groups managed set-autoscaling "us-central1-mig" --region "us-central1" --cool-down-period "60" --max-num-replicas "2" --min-num-replicas "1" --target-load-balancing-utilization "0.8" --mode "on"
+
+gcloud beta compute --project=qwiklabs-gcp-8ee414a241735cb8 instance-groups managed create europe-west1-mig --base-instance-name=europe-west1-mig --template=mywebserver-template --size=1 --zones=europe-west1-b,europe-west1-c,europe-west1-d --instance-redistribution-type=PROACTIVE
+
+gcloud beta compute --project "qwiklabs-gcp-8ee414a241735cb8" instance-groups managed set-autoscaling "europe-west1-mig" --region "europe-west1" --cool-down-period "60" --max-num-replicas "2" --min-num-replicas "1" --target-load-balancing-utilization "0.8" --mode "on"
+
+#Configure the HTTP load balancer
+
+
+
+
+#Stress test the HTTP load balancer
